@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DFA / NFA Simulator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+  /* ─── Reset & Base ─── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1117; --bg2: #181c27; --bg3: #1e2333; --bg4: #252b3d;
+    --border: rgba(255,255,255,0.08); --border2: rgba(255,255,255,0.15);
+    --text: #e8eaf0; --text2: #9aa3b8; --text3: #6b7590;
+    --accent: #6c63ff; --accent2: #8b84ff; --accent-bg: rgba(108,99,255,0.12);
+    --yellow: #f5c842; --yellow-bg: rgba(245,200,66,0.15);
+    --green: #3ddc84; --green-bg: rgba(61,220,132,0.15);
+    --red: #ff5a5a; --red-bg: rgba(255,90,90,0.15);
+    --blue: #4e9eff; --blue-bg: rgba(78,158,255,0.15);
+    --radius: 10px; --radius-sm: 6px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    --font: 'Segoe UI', system-ui, sans-serif;
+    --mono: 'Fira Code', 'Cascadia Code', monospace;
+  }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+
+  /* ─── Header ─── */
+  header {
+    background: linear-gradient(135deg, #1a1040 0%, #0f1117 60%);
+    border-bottom: 1px solid var(--border);
+    padding: 1.2rem 2rem;
+    display: flex; align-items: center; gap: 1rem;
+  }
+  header .logo { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.5px; }
+  header .logo span { color: var(--accent); }
+  header .badge {
+    background: var(--accent-bg); border: 1px solid var(--accent);
+    color: var(--accent2); font-size: 0.72rem; font-weight: 600;
+    padding: 2px 8px; border-radius: 20px; letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  header .mode-toggle {
+    margin-left: auto; display: flex; background: var(--bg3); border: 1px solid var(--border2);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  header .mode-toggle button {
+    padding: 6px 18px; background: none; border: none; color: var(--text2);
+    font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    letter-spacing: 0.3px;
+  }
+  header .mode-toggle button.active { background: var(--accent); color: #fff; }
+
+  /* ─── Layout ─── */
+  .app { display: grid; grid-template-columns: 380px 1fr; min-height: calc(100vh - 64px); }
+  .panel { padding: 1.4rem; overflow-y: auto; }
+  .panel-left { background: var(--bg2); border-right: 1px solid var(--border); }
+  .panel-right { display: flex; flex-direction: column; gap: 0; }
+
+  /* ─── Section titles ─── */
+  .sec-title {
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+    color: var(--text3); margin-bottom: 0.7rem; display: flex; align-items: center; gap: 6px;
+  }
+  .sec-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* ─── Form Elements ─── */
+  .field { margin-bottom: 1rem; }
+  label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--text2); margin-bottom: 5px; }
+  label .hint { font-weight: 400; color: var(--text3); }
+  input[type=text], textarea {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: 0.82rem;
+    padding: 8px 10px; border-radius: var(--radius-sm); outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type=text]:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+
+  /* ─── Prominent Input String field ─── */
+  .field-prominent {
+    background: linear-gradient(135deg, rgba(108,99,255,0.08) 0%, rgba(139,132,255,0.04) 100%);
+    border: 1px solid rgba(108,99,255,0.35); border-radius: var(--radius);
+    padding: 12px 14px; margin-bottom: 1.2rem;
+  }
+  .field-prominent label {
+    font-size: 0.82rem; font-weight: 700; color: var(--accent2);
+    letter-spacing: 0.3px; margin-bottom: 7px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .field-prominent label::before { content: '▶'; font-size: 0.6rem; color: var(--accent); }
+  .field-prominent input[type=text] {
+    font-size: 1rem; padding: 10px 12px; letter-spacing: 1.5px;
+    border-color: rgba(108,99,255,0.4); background: var(--bg2);
+    color: var(--accent2); font-weight: 600;
+  }
+  .field-prominent input[type=text]:focus { border-color: var(--accent2); box-shadow: 0 0 0 2px rgba(108,99,255,0.15); }
+
+  /* ─── Buttons ─── */
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 0.5rem; }
+  button.btn {
+    padding: 8px 16px; border-radius: var(--radius-sm); border: none; font-size: 0.82rem;
+    font-weight: 600; cursor: pointer; transition: all 0.18s; display: flex; align-items: center; gap: 6px;
+  }
+  button.btn:active { transform: scale(0.97); }
+  button.btn.primary { background: var(--accent); color: #fff; }
+  button.btn.primary:hover { background: var(--accent2); }
+  button.btn.secondary { background: var(--bg4); color: var(--text2); border: 1px solid var(--border2); }
+  button.btn.secondary:hover { background: var(--bg3); color: var(--text); }
+  button.btn.danger { background: var(--red-bg); color: var(--red); border: 1px solid rgba(255,90,90,0.3); }
+  button.btn.danger:hover { background: rgba(255,90,90,0.25); }
+  button.btn.example { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(78,158,255,0.3); font-size: 0.75rem; padding: 6px 12px; }
+  button.btn.example:hover { background: rgba(78,158,255,0.25); }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ─── Diagram ─── */
+  #diagram-container {
+    flex: 1; background: var(--bg3); border-bottom: 1px solid var(--border);
+    position: relative; min-height: 320px; overflow: hidden;
+  }
+  #diagram-container svg { width: 100%; height: 100%; }
+  #diagram-placeholder {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 8px; pointer-events: none;
+  }
+  #diagram-placeholder .icon { font-size: 2.5rem; opacity: 0.2; }
+  #diagram-placeholder p { color: var(--text3); font-size: 0.85rem; }
+
+  /* ─── D3 States ─── */
+  .state-circle { cursor: pointer; transition: r 0.2s; }
+  .state-label { font-family: var(--mono); font-size: 13px; fill: var(--text); font-weight: 600; pointer-events: none; }
+  .edge-path { fill: none; stroke: var(--text3); stroke-width: 1.8; }
+  .edge-label { font-size: 11px; fill: var(--text2); font-family: var(--mono); }
+  .start-arrow { fill: none; stroke: var(--accent); stroke-width: 2; }
+
+  /* ─── Simulation Output ─── */
+  #sim-output {
+    height: 280px; background: var(--bg2); overflow-y: auto; padding: 1.2rem;
+    border-top: 1px solid var(--border);
+  }
+  #sim-output .empty { color: var(--text3); font-size: 0.85rem; text-align: center; padding: 2rem 0; }
+  .step-row {
+    display: flex; align-items: flex-start; gap: 10px; padding: 6px 0;
+    border-bottom: 1px solid var(--border); font-size: 0.82rem;
+  }
+  .step-num { min-width: 26px; color: var(--text3); font-family: var(--mono); font-size: 0.75rem; padding-top: 1px; }
+  .step-content { flex: 1; line-height: 1.5; }
+  .step-content .states { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+  .state-chip {
+    display: inline-block; padding: 1px 8px; border-radius: 20px; font-size: 0.75rem;
+    font-family: var(--mono); font-weight: 600; border: 1px solid;
+  }
+  .chip-active { background: var(--yellow-bg); color: var(--yellow); border-color: rgba(245,200,66,0.4); }
+  .chip-accept { background: var(--green-bg); color: var(--green); border-color: rgba(61,220,132,0.4); }
+  .chip-dead { background: var(--red-bg); color: var(--red); border-color: rgba(255,90,90,0.4); }
+  .step-symbol { font-family: var(--mono); font-weight: 700; color: var(--accent2); }
+
+  .result-banner {
+    margin: 10px 0; padding: 16px 22px; border-radius: var(--radius); font-weight: 800;
+    font-size: 1.4rem; display: flex; align-items: center; gap: 12px;
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+  .result-accept { background: var(--green-bg); color: var(--green); border: 2px solid rgba(61,220,132,0.5); }
+  .result-reject { background: var(--red-bg); color: var(--red); border: 2px solid rgba(255,90,90,0.5); }
+
+  /* ─── Transition Table ─── */
+  #table-section {
+    background: var(--bg2); border-top: 1px solid var(--border);
+    padding: 0; max-height: 0; overflow: hidden; transition: max-height 0.35s ease;
+  }
+  #table-section.open { max-height: 260px; padding: 1rem 1.4rem; overflow-y: auto; }
+  .trans-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; font-family: var(--mono); }
+  .trans-table th, .trans-table td {
+    padding: 5px 10px; border: 1px solid var(--border); text-align: center;
+  }
+  .trans-table th { background: var(--bg4); color: var(--text2); font-weight: 600; }
+  .trans-table td.state-col { color: var(--accent2); font-weight: 600; }
+  .trans-table tr.start-row td.state-col::before { content: '→ '; color: var(--accent); }
+  .trans-table tr.accept-row td.state-col { color: var(--green); }
+
+  /* ─── Step log line ─── */
+  .step-log-line {
+    font-family: var(--mono); font-size: 0.85rem; padding: 5px 0;
+    border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  }
+  .step-log-line .sll-num { color: var(--text3); min-width: 58px; font-size: 0.75rem; }
+  .step-log-line .sll-sym { color: var(--accent2); font-weight: 700; }
+  .step-log-line .sll-states { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .sll-brace { color: var(--text3); font-size: 1rem; }
+
+  /* ─── Controls bar ─── */
+  #controls-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 0.8rem 1.4rem; background: var(--bg3); border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  #step-info { font-size: 0.78rem; color: var(--text3); margin-left: auto; font-family: var(--mono); }
+
+  /* ─── Scrollbars ─── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+  /* ─── Responsive ─── */
+  @media (max-width: 820px) {
+    .app { grid-template-columns: 1fr; }
+    .panel-left { border-right: none; border-bottom: 1px solid var(--border); }
+    #diagram-container { min-height: 260px; }
+    #sim-output { height: 220px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ─────────── HEADER ─────────── -->
+<header>
+  <div class="logo">Auto<span>Sim</span></div>
+  <div class="badge">DFA / NFA</div>
+  <div class="mode-toggle">
+    <button id="btn-dfa" class="active" onclick="setMode('DFA')">DFA</button>
+    <button id="btn-nfa" onclick="setMode('NFA')">NFA</button>
+  </div>
+</header>
+
+<!-- ─────────── MAIN LAYOUT ─────────── -->
+<div class="app">
+
+  <!-- ── LEFT PANEL: INPUT ── -->
+  <div class="panel panel-left">
+
+    <div class="sec-title">Input String</div>
+
+    <!-- INPUT STRING — prominent, at the top -->
+    <div class="field-prominent">
+      <label>Input String to Test</label>
+      <input type="text" id="inp-string" placeholder="e.g. aabba or 0101" oninput="onInputChange()">
+    </div>
+
+    <div class="sec-title">Automaton Definition</div>
+
+    <div class="field">
+      <label>States <span class="hint">(comma-separated)</span></label>
+      <input type="text" id="inp-states" placeholder="q0, q1, q2" oninput="onInputChange()">
+    </div>
+    <div class="field">
+      <label>Alphabet <span class="hint">(comma-separated)</span></label>
+      <input type="text" id="inp-alpha" placeholder="a, b" oninput="onInputChange()">
+    </div>
+    <div class="field">
+      <label>Start State</label>
+      <input type="text" id="inp-start" placeholder="q0" oninput="onInputChange()">
+    </div>
+    <div class="field">
+      <label>Accept States <span class="hint">(comma-separated)</span></label>
+      <input type="text" id="inp-accept" placeholder="q2" oninput="onInputChange()">
+    </div>
+    <div class="field">
+      <label>Transition Function</label>
+      <textarea id="inp-trans" placeholder="(q0,a) -> q1&#10;(q0,b) -> q0&#10;(q1,a) -> q1,q2" oninput="onInputChange()"></textarea>
+    </div>
+
+    <div class="sec-title" style="margin-top:0.5rem;">Actions</div>
+    <div class="btn-row">
+      <button class="btn primary" onclick="simulate()">▶ Simulate</button>
+      <button class="btn secondary" id="btn-step" onclick="stepForward()" disabled>Step →</button>
+      <button class="btn danger" onclick="resetAll()">✕ Reset</button>
+    </div>
+
+    <div class="sec-title" style="margin-top:1.4rem;">Examples</div>
+    <div class="btn-row">
+      <button class="btn example" onclick="loadExample('dfa-binary')">DFA Binary</button>
+      <button class="btn example" onclick="loadExample('dfa-alpha')">DFA (a,b)</button>
+      <button class="btn example" onclick="loadExample('nfa')">NFA Example</button>
+    </div>
+
+    <div class="btn-row" style="margin-top:0.8rem;">
+      <button class="btn secondary" id="btn-table" onclick="toggleTable()">⊞ Show Transition Table</button>
+    </div>
+
+  </div>
+
+  <!-- ── RIGHT PANEL: DIAGRAM + OUTPUT ── -->
+  <div class="panel-right">
+
+    <!-- Controls bar -->
+    <div id="controls-bar">
+      <span style="font-size:0.78rem; color:var(--text2); font-weight:600;" id="mode-label">Mode: DFA</span>
+      <span id="step-info"></span>
+    </div>
+
+    <!-- Diagram -->
+    <div id="diagram-container">
+      <div id="diagram-placeholder">
+        <div class="icon">⬡</div>
+        <p>Define states and transitions to visualize the automaton</p>
+      </div>
+      <svg id="diagram-svg"></svg>
+    </div>
+
+    <!-- Transition table (collapsible) -->
+    <div id="table-section">
+      <div class="sec-title" style="margin-bottom:0.6rem;">Transition Table</div>
+      <div id="trans-table-wrapper"></div>
+    </div>
+
+    <!-- Simulation output -->
+    <div id="sim-output">
+      <div class="empty" id="sim-empty">Run a simulation to see step-by-step output here.</div>
+      <div id="sim-steps"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ─────────── JAVASCRIPT ─────────── -->
+<script>
+/* ══════════════════════════════════════════
+   STATE
+══════════════════════════════════════════ */
+let mode = 'DFA';
+let automaton = null;
+let stepIndex = 0;
+let allSteps = [];
+
+/* ══════════════════════════════════════════
+   PARSE UTILITIES
+══════════════════════════════════════════ */
+function csv(str) {
+  return str.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * Robust transition parser.
+ * Normalises: → to ->, removes stray spaces, trailing commas.
+ * Accepts only targets that are known states (validated after full parse).
+ */
+function parseTransitions(raw, validStates) {
+  const trans = {};
+  // Normalise unicode arrow and whitespace
+  const normalised = raw
+    .replace(/→/g, '->')      // unicode arrow → ASCII
+    .replace(/=>/g, '->')     // fat arrow
+    .replace(/[ \t]+/g, ' ') // collapse spaces
+    .trim();
+
+  const lines = normalised.split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // Pattern: (state , symbol) -> target1, target2, ...
+    // Allows optional spaces around comma inside parens
+    const m = trimmed.match(/^\(\s*([^,)]+?)\s*,\s*([^)]+?)\s*\)\s*-+>\s*(.+)$/);
+    if (!m) continue;
+
+    const state  = m[1].trim();
+    const symbol = m[2].trim();
+    // Clean targets: split by comma, strip whitespace and trailing commas/stray chars
+    const rawTargets = m[3].trim().replace(/,+$/, ''); // remove trailing commas
+    const toList = rawTargets.split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    if (!trans[state]) trans[state] = {};
+    if (!trans[state][symbol]) trans[state][symbol] = [];
+    trans[state][symbol].push(...toList);
+  }
+
+  // If validStates provided, filter out unknown targets to avoid broken nodes
+  if (validStates && validStates.length) {
+    const vSet = new Set(validStates);
+    for (const st of Object.keys(trans)) {
+      for (const sym of Object.keys(trans[st])) {
+        trans[st][sym] = trans[st][sym].filter(t => vSet.has(t));
+      }
+    }
+  }
+  return trans;
+}
+
+function buildAutomaton() {
+  const states   = csv(document.getElementById('inp-states').value);
+  const alphabet = csv(document.getElementById('inp-alpha').value);
+  const start    = document.getElementById('inp-start').value.trim();
+  const accepts  = csv(document.getElementById('inp-accept').value);
+  const transRaw = document.getElementById('inp-trans').value;
+  const inputStr = document.getElementById('inp-string').value.trim();
+
+  if (!states.length || !start || !accepts.length || !transRaw.trim()) return null;
+  if (!states.includes(start)) return null;
+
+  const trans = parseTransitions(transRaw, states);
+  return { states, alphabet, start, accepts, trans, inputStr };
+}
+
+/* ══════════════════════════════════════════
+   SIMULATION — DFA
+   Step format: Step 0: q0 | Step 1 (read a): q1
+══════════════════════════════════════════ */
+function simulateDFA(aut) {
+  const steps = [];
+  let current = aut.start;
+
+  steps.push({
+    idx: 0, type: 'init', states: [current], symbol: null,
+    label: `Step 0`,
+    stateDisplay: current
+  });
+
+  for (let i = 0; i < aut.inputStr.length; i++) {
+    const sym = aut.inputStr[i];
+    const next = aut.trans[current]?.[sym]?.[0] ?? null;
+
+    if (next === null || next === undefined) {
+      steps.push({
+        idx: i + 1, type: 'dead', states: [], symbol: sym,
+        label: `Step ${i + 1} (read ${sym})`,
+        stateDisplay: '∅'
+      });
+      current = null;
+      break;
+    }
+    steps.push({
+      idx: i + 1, type: 'move', states: [next], symbol: sym,
+      label: `Step ${i + 1} (read ${sym})`,
+      stateDisplay: next
+    });
+    current = next;
+  }
+
+  const accepted = current !== null && aut.accepts.includes(current);
+  steps.push({
+    idx: steps.length, type: accepted ? 'accept' : 'reject',
+    states: current ? [current] : [], symbol: null,
+    label: 'Result',
+    stateDisplay: current ?? '∅',
+    accepted
+  });
+  return steps;
+}
+
+/* ══════════════════════════════════════════
+   SIMULATION — NFA
+   Step format: Step 0: {q0} | Step 1 (read a): {q1, q2}
+══════════════════════════════════════════ */
+function simulateNFA(aut) {
+  const steps = [];
+  let currentSet = new Set([aut.start]);
+
+  steps.push({
+    idx: 0, type: 'init', states: [...currentSet], symbol: null,
+    label: `Step 0`,
+    stateDisplay: `{${[...currentSet].join(', ')}}`
+  });
+
+  for (let i = 0; i < aut.inputStr.length; i++) {
+    const sym = aut.inputStr[i];
+    const nextSet = new Set();
+    for (const st of currentSet) {
+      (aut.trans[st]?.[sym] ?? []).forEach(t => nextSet.add(t));
+    }
+
+    if (nextSet.size === 0) {
+      steps.push({
+        idx: i + 1, type: 'dead', states: [], symbol: sym,
+        label: `Step ${i + 1} (read ${sym})`,
+        stateDisplay: '{∅}'
+      });
+      currentSet = new Set();
+      break;
+    }
+    steps.push({
+      idx: i + 1, type: 'move', states: [...nextSet], symbol: sym,
+      label: `Step ${i + 1} (read ${sym})`,
+      stateDisplay: `{${[...nextSet].join(', ')}}`
+    });
+    currentSet = nextSet;
+  }
+
+  const acceptingStates = [...currentSet].filter(s => aut.accepts.includes(s));
+  const accepted = acceptingStates.length > 0;
+  steps.push({
+    idx: steps.length, type: accepted ? 'accept' : 'reject',
+    states: [...currentSet], symbol: null,
+    label: 'Result',
+    stateDisplay: currentSet.size ? `{${[...currentSet].join(', ')}}` : '{∅}',
+    accepted
+  });
+  return steps;
+}
+
+/* ══════════════════════════════════════════
+   MAIN SIMULATE / STEP
+══════════════════════════════════════════ */
+function simulate() {
+  automaton = buildAutomaton();
+  if (!automaton) { alert('Please fill in all required fields (states must include the start state).'); return; }
+
+  allSteps = mode === 'DFA' ? simulateDFA(automaton) : simulateNFA(automaton);
+  stepIndex = 0;
+  document.getElementById('sim-empty').style.display = 'none';
+  document.getElementById('sim-steps').innerHTML = '';
+  document.getElementById('btn-step').disabled = false;
+  document.getElementById('step-info').textContent = `Step 0 / ${allSteps.length - 1}`;
+
+  renderDiagram(automaton);
+  buildTransTable(automaton);
+  renderStep(0);
+  updateHighlight(allSteps[0]);
+}
+
+function stepForward() {
+  if (stepIndex >= allSteps.length - 1) return;
+  stepIndex++;
+  renderStep(stepIndex);
+  updateHighlight(allSteps[stepIndex]);
+  if (stepIndex >= allSteps.length - 1) document.getElementById('btn-step').disabled = true;
+  document.getElementById('step-info').textContent = `Step ${stepIndex} / ${allSteps.length - 1}`;
+}
+
+/* ══════════════════════════════════════════
+   RENDER STEP OUTPUT
+   Clean step-log format matching requirements
+══════════════════════════════════════════ */
+function renderStep(idx) {
+  const container = document.getElementById('sim-steps');
+  const step = allSteps[idx];
+
+  // Result banner (large, bold, colored)
+  if (step.type === 'accept' || step.type === 'reject') {
+    const banner = document.createElement('div');
+    banner.className = `result-banner ${step.accepted ? 'result-accept' : 'result-reject'}`;
+    banner.innerHTML = step.accepted
+      ? '<span>✓</span> ACCEPTED'
+      : '<span>✗</span> REJECTED';
+    container.insertBefore(banner, container.firstChild);
+  }
+
+  const row = document.createElement('div');
+  row.className = 'step-log-line';
+
+  // Build chips for state display
+  const stateChips = step.states.map(s => {
+    const isAccept = automaton.accepts.includes(s);
+    const cls = step.type === 'dead'   ? 'chip-dead'   :
+                step.type === 'accept' && isAccept ? 'chip-accept' :
+                step.type === 'reject' ? 'chip-dead'   : 'chip-active';
+    return `<span class="state-chip ${cls}">${s}</span>`;
+  }).join('');
+
+  const isNFA = mode === 'NFA';
+  const leftBrace  = isNFA ? `<span class="sll-brace">{</span>` : '';
+  const rightBrace = isNFA ? `<span class="sll-brace">}</span>` : '';
+  const emptyChip  = step.states.length === 0
+    ? `<span class="state-chip chip-dead">${isNFA ? '∅' : '∅ dead'}</span>` : '';
+
+  row.innerHTML = `
+    <span class="sll-num">${step.label}:</span>
+    <span class="sll-states">${leftBrace}${stateChips}${emptyChip}${rightBrace}</span>`;
+
+  container.appendChild(row);
+  container.scrollTop = container.scrollHeight;
+}
+
+/* ══════════════════════════════════════════
+   DIAGRAM — D3.js  (Left-to-Right layout)
+   Start state is pinned to the left.
+   Edges built only from valid states.
+══════════════════════════════════════════ */
+let svgSel, gSel;
+const nodeRadius = 26;
+
+function renderDiagram(aut) {
+  const svg = document.getElementById('diagram-svg');
+  const placeholder = document.getElementById('diagram-placeholder');
+  placeholder.style.display = 'none';
+  d3.select('#diagram-svg').selectAll('*').remove();
+
+  const W = Math.max(svg.clientWidth  || 0, 400);
+  const H = Math.max(svg.clientHeight || 0, 300);
+
+  svgSel = d3.select('#diagram-svg');
+  gSel   = svgSel.append('g').attr('id', 'main-g');
+
+  // ── Arrow markers ──
+  const defs = svgSel.append('defs');
+  const makeMarker = (id, color) => {
+    defs.append('marker')
+      .attr('id', id).attr('viewBox','0 0 10 10')
+      .attr('refX', 9).attr('refY', 5)
+      .attr('markerWidth', 6).attr('markerHeight', 6)
+      .attr('orient','auto-start-reverse')
+      .append('path').attr('d','M 0 1 L 9 5 L 0 9 Z').attr('fill', color);
+  };
+  makeMarker('arrowDefault',   '#6b7590');
+  makeMarker('arrowHighlight', '#f5c842');
+  makeMarker('arrowStart',     '#6c63ff');
+
+  // ── Build node list — only validated states ──
+  const validSet = new Set(aut.states);
+  const nodes = aut.states.map(s => ({ id: s }));
+
+  // ── Build edge list (only valid source→target) ──
+  const edgeMap = {}; // key: "src__tgt" → { source, target, labels[] }
+  for (const [st, syms] of Object.entries(aut.trans)) {
+    if (!validSet.has(st)) continue;
+    for (const [sym, targets] of Object.entries(syms)) {
+      for (const t of targets) {
+        if (!validSet.has(t)) continue;
+        const key = `${st}__${t}`;
+        if (!edgeMap[key]) edgeMap[key] = { source: st, target: t, labels: [] };
+        edgeMap[key].labels.push(sym);
+      }
+    }
+  }
+  const edges = Object.values(edgeMap);
+
+  // ── Force simulation with LR bias ──
+  // Pin start node to left third, spread others rightward
+  const nonStart = nodes.filter(n => n.id !== aut.start);
+  const startNode = nodes.find(n => n.id === aut.start);
+
+  // Initial x positions: start node on the left, others distributed
+  startNode.x = nodeRadius + 50;
+  startNode.y = H / 2;
+  nonStart.forEach((n, i) => {
+    n.x = W * 0.4 + (i % 3) * 120;
+    n.y = 60 + Math.floor(i / 3) * 110;
+  });
+
+  const sim = d3.forceSimulation(nodes)
+    .force('link',      d3.forceLink(edges).id(d => d.id).distance(130))
+    .force('charge',    d3.forceManyBody().strength(-420))
+    .force('center',    d3.forceCenter(W * 0.55, H / 2))
+    .force('collision', d3.forceCollide(62))
+    // X-axis bias: push start node left, others to the right
+    .force('xBias',     d3.forceX().x(n => n.id === aut.start ? nodeRadius + 50 : W * 0.6).strength(0.18))
+    .stop();
+
+  for (let i = 0; i < 400; i++) sim.tick();
+
+  // Clamp all nodes inside SVG bounds with enough margin for start arrow
+  nodes.forEach(n => {
+    n.x = Math.max(nodeRadius + 48, Math.min(W - nodeRadius - 10, n.x));
+    n.y = Math.max(nodeRadius + 10, Math.min(H - nodeRadius - 10, n.y));
+  });
+
+  const nodeMap = {};
+  nodes.forEach(n => nodeMap[n.id] = n);
+
+  // ── Draw edges ──
+  const edgeG = gSel.append('g').attr('id', 'edges');
+
+  edges.forEach(e => {
+    const src = nodeMap[e.source.id ?? e.source];
+    const tgt = nodeMap[e.target.id ?? e.target];
+    if (!src || !tgt) return; // guard against missing nodes
+    const isSelf = src.id === tgt.id;
+    const label  = e.labels.join(', ');
+
+    if (isSelf) {
+      const loopY = src.y - nodeRadius * 1.7;
+      edgeG.append('path')
+        .attr('class','edge-path')
+        .attr('d', `M ${src.x - 13} ${src.y - nodeRadius}
+                    C ${src.x - 55} ${loopY - 28}
+                      ${src.x + 55} ${loopY - 28}
+                      ${src.x + 13} ${src.y - nodeRadius}`)
+        .attr('marker-end','url(#arrowDefault)');
+      edgeG.append('text').attr('class','edge-label')
+        .attr('x', src.x).attr('y', loopY - 20)
+        .attr('text-anchor','middle').text(label);
+    } else {
+      const hasReverse = edges.some(e2 =>
+        (e2.source.id ?? e2.source) === (e.target.id ?? e.target) &&
+        (e2.target.id ?? e2.target) === (e.source.id ?? e.source));
+      const dx   = tgt.x - src.x, dy = tgt.y - src.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const ux = dx / dist, uy = dy / dist;
+      const perp = hasReverse ? 24 : 0;
+      const mx = (src.x + tgt.x) / 2 - uy * perp;
+      const my = (src.y + tgt.y) / 2 + ux * perp;
+      const x1 = src.x + ux * nodeRadius, y1 = src.y + uy * nodeRadius;
+      const x2 = tgt.x - ux * nodeRadius, y2 = tgt.y - uy * nodeRadius;
+
+      edgeG.append('path').attr('class','edge-path')
+        .attr('d', `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`)
+        .attr('marker-end','url(#arrowDefault)');
+      edgeG.append('text').attr('class','edge-label')
+        .attr('x', mx).attr('y', my - 7)
+        .attr('text-anchor','middle').text(label);
+    }
+  });
+
+  // ── Start arrow — points into start node from the left ──
+  const sn = nodeMap[aut.start];
+  gSel.append('line').attr('class','start-arrow')
+    .attr('x1', sn.x - nodeRadius - 32).attr('y1', sn.y)
+    .attr('x2', sn.x - nodeRadius - 3).attr('y2', sn.y)
+    .attr('marker-end','url(#arrowStart)');
+
+  // ── Draw nodes ──
+  const nodeG = gSel.append('g').attr('id', 'nodes');
+  nodes.forEach(n => {
+    const isAccept = aut.accepts.includes(n.id);
+    const isStart  = n.id === aut.start;
+    const g = nodeG.append('g').attr('id', `node-${n.id}`).attr('class','state-group');
+
+    g.append('circle').attr('cx', n.x).attr('cy', n.y).attr('r', nodeRadius)
+      .attr('class','state-circle')
+      .attr('fill',   isAccept ? 'rgba(61,220,132,0.12)' : 'rgba(30,35,51,0.9)')
+      .attr('stroke', isAccept ? '#3ddc84' : isStart ? '#6c63ff' : '#6b7590')
+      .attr('stroke-width', 2);
+
+    if (isAccept) {
+      g.append('circle').attr('cx', n.x).attr('cy', n.y).attr('r', nodeRadius - 5)
+        .attr('fill','none').attr('stroke','#3ddc84')
+        .attr('stroke-width', 1.2).attr('stroke-dasharray','3 2');
+    }
+    g.append('text').attr('class','state-label')
+      .attr('x', n.x).attr('y', n.y)
+      .attr('text-anchor','middle').attr('dominant-baseline','central').text(n.id);
+  });
+
+  // ── Zoom & pan ──
+  svgSel.call(d3.zoom().scaleExtent([0.3, 3])
+    .on('zoom', e => gSel.attr('transform', e.transform)));
+}
+
+function updateHighlight(step) {
+  if (!automaton) return;
+  // Reset all nodes to their default appearance
+  d3.selectAll('.state-group circle:first-child')
+    .attr('fill', function() {
+      const stId = this.parentNode.id.replace('node-','');
+      return automaton.accepts.includes(stId) ? 'rgba(61,220,132,0.12)' : 'rgba(30,35,51,0.9)';
+    })
+    .attr('stroke', function() {
+      const stId = this.parentNode.id.replace('node-','');
+      return automaton.accepts.includes(stId) ? '#3ddc84'
+           : stId === automaton.start         ? '#6c63ff' : '#6b7590';
+    })
+    .attr('stroke-width', 2);
+
+  if (!step || !step.states) return;
+
+  step.states.forEach(stId => {
+    const nodeEl = d3.select(`#node-${CSS.escape(stId)} circle:first-child`);
+    if (nodeEl.empty()) return;
+    const isAccept = automaton.accepts.includes(stId);
+
+    if (step.type === 'accept' && isAccept) {
+      nodeEl.attr('fill','rgba(61,220,132,0.40)').attr('stroke','#3ddc84').attr('stroke-width', 3);
+    } else if (step.type === 'reject' || step.type === 'dead') {
+      nodeEl.attr('fill','rgba(255,90,90,0.28)').attr('stroke','#ff5a5a').attr('stroke-width', 3);
+    } else {
+      // Active / current state(s) → yellow highlight
+      nodeEl.attr('fill','rgba(245,200,66,0.28)').attr('stroke','#f5c842').attr('stroke-width', 3);
+    }
+  });
+}
+
+/* ══════════════════════════════════════════
+   TRANSITION TABLE
+══════════════════════════════════════════ */
+function buildTransTable(aut) {
+  const wrapper = document.getElementById('trans-table-wrapper');
+  if (!aut) { wrapper.innerHTML=''; return; }
+  let html = `<table class="trans-table"><thead><tr><th>State</th>`;
+  aut.alphabet.forEach(sym => html += `<th>${sym}</th>`);
+  html += `</tr></thead><tbody>`;
+  aut.states.forEach(st => {
+    const isStart  = st === aut.start;
+    const isAccept = aut.accepts.includes(st);
+    const rowCls   = isAccept ? 'accept-row' : isStart ? 'start-row' : '';
+    html += `<tr class="${rowCls}"><td class="state-col">${st}</td>`;
+    aut.alphabet.forEach(sym => {
+      const targets = aut.trans[st]?.[sym] ?? [];
+      html += `<td>${targets.length ? targets.join(',') : '—'}</td>`;
+    });
+    html += `</tr>`;
+  });
+  html += `</tbody></table>`;
+  wrapper.innerHTML = html;
+}
+
+/* ══════════════════════════════════════════
+   EXAMPLES
+══════════════════════════════════════════ */
+const EXAMPLES = {
+  'dfa-binary': {
+    states:'q0, q1, q2', alpha:'0, 1', start:'q0', accept:'q2',
+    trans: `(q0,0) -> q0\n(q0,1) -> q1\n(q1,0) -> q0\n(q1,1) -> q2\n(q2,0) -> q2\n(q2,1) -> q2`,
+    str: '0110111'
+  },
+  'dfa-alpha': {
+    states:'q0, q1, q2, q3', alpha:'a, b', start:'q0', accept:'q3',
+    trans: `(q0,a) -> q1\n(q0,b) -> q0\n(q1,a) -> q1\n(q1,b) -> q2\n(q2,a) -> q1\n(q2,b) -> q3\n(q3,a) -> q1\n(q3,b) -> q0`,
+    str: 'aabb'
+  },
+  'nfa': {
+    states:'q0, q1, q2, q3', alpha:'a, b', start:'q0', accept:'q3',
+    trans: `(q0,a) -> q0,q1\n(q0,b) -> q0\n(q1,b) -> q2\n(q2,b) -> q3`,
+    str: 'aabb'
+  }
+};
+
+function loadExample(key) {
+  const ex = EXAMPLES[key];
+  if (!ex) return;
+  if (key === 'nfa') setMode('NFA'); else setMode('DFA');
+  document.getElementById('inp-states').value = ex.states;
+  document.getElementById('inp-alpha').value   = ex.alpha;
+  document.getElementById('inp-start').value   = ex.start;
+  document.getElementById('inp-accept').value  = ex.accept;
+  document.getElementById('inp-trans').value   = ex.trans;
+  document.getElementById('inp-string').value  = ex.str;
+  onInputChange();
+}
+
+/* ══════════════════════════════════════════
+   MISC
+══════════════════════════════════════════ */
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn-dfa').classList.toggle('active', m==='DFA');
+  document.getElementById('btn-nfa').classList.toggle('active', m==='NFA');
+  document.getElementById('mode-label').textContent = `Mode: ${m}`;
+}
+
+function onInputChange() {
+  const aut = buildAutomaton();
+  if (aut) { renderDiagram(aut); buildTransTable(aut); }
+  else { buildTransTable(null); }
+}
+
+function resetAll() {
+  ['inp-states','inp-alpha','inp-start','inp-accept','inp-trans','inp-string']
+    .forEach(id => document.getElementById(id).value = '');
+  document.getElementById('sim-empty').style.display = 'block';
+  document.getElementById('sim-steps').innerHTML = '';
+  document.getElementById('btn-step').disabled = true;
+  document.getElementById('step-info').textContent = '';
+  d3.select('#diagram-svg').selectAll('*').remove();
+  document.getElementById('diagram-placeholder').style.display = 'flex';
+  document.getElementById('trans-table-wrapper').innerHTML = '';
+  allSteps = []; stepIndex = 0; automaton = null;
+}
+
+let tableOpen = false;
+function toggleTable() {
+  tableOpen = !tableOpen;
+  document.getElementById('table-section').classList.toggle('open', tableOpen);
+  document.getElementById('btn-table').textContent = tableOpen ? '⊟ Hide Transition Table' : '⊞ Show Transition Table';
+}
+
+// Recalculate diagram on resize
+window.addEventListener('resize', () => { if (automaton) renderDiagram(automaton); });
+</script>
+</body>
+</html>
